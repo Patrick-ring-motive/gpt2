@@ -59,16 +59,31 @@
     const sendButton = document.getElementById('send-button');
     const statusText = document.getElementById('status');
 
+    let lastBotMessageContent = null;
+
     function addMessage(text, isUser) {
-      const messageDiv = document.createElement('div');
-      messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
-      
-      const contentDiv = document.createElement('div');
-      contentDiv.className = 'message-content';
-      contentDiv.textContent = text;
-      
-      messageDiv.appendChild(contentDiv);
-      messagesContainer.appendChild(messageDiv);
+      // For bot messages, append to the last bot message if it exists
+      if (!isUser && lastBotMessageContent) {
+        lastBotMessageContent.textContent += text;
+      } else {
+        // Create a new message bubble
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+        
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        contentDiv.textContent = text;
+        
+        messageDiv.appendChild(contentDiv);
+        messagesContainer.appendChild(messageDiv);
+        
+        // Update reference to last bot message if this is a bot message
+        if (isUser === false) {
+          lastBotMessageContent = contentDiv;
+        } else {
+          lastBotMessageContent = null;
+        }
+      }
       
       // Scroll to bottom
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -92,8 +107,8 @@
         gpt2.resolve?.(true);
         sendButton.disabled = false;
         inputField.disabled = false;
-      } else {
-        // Add bot response
+      } else if (data !== "ready") {
+        // Append to bot response (or create if first chunk)
         addMessage(data, false);
         updateStatus("Ready");
         sendButton.disabled = false;
