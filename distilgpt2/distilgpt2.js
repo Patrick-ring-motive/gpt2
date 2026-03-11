@@ -192,7 +192,7 @@ const context = [];
         }
       });
       const output = await generator(txt, {
-        max_length: 64,
+        max_length: 256,
         do_sample: true,
         top_k: 10,
         streamer
