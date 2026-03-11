@@ -3,8 +3,8 @@
 
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width">
-  <title>gpt2</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPT-2 Chat</title>
   <link href="style.css" rel="stylesheet" type="text/css" />
   <script>
     ReadableStream.prototype[Symbol.asyncIterator] ??=
@@ -20,33 +20,64 @@
         reader?.releaseLock?.();
       }
     };
-    
   </script>
 </head>
 
 <body>
-  <input type="text" id="input"></input><button>Send</button>
-  <output></output>
-  <script  type="module">
+  <div class="chat-container">
+    <div class="chat-header">
+      <h1>GPT-2 Chat</h1>
+      <p class="subtitle">Powered by Transformers.js</p>
+    </div>
+    
+    <div id="messages" class="messages-container"></div>
+    
+    <div class="input-area">
+      <div class="input-wrapper">
+        <input 
+          type="text" 
+          id="input" 
+          class="message-input"
+          placeholder="Type your message..."
+          autocomplete="off"
+        />
+        <button id="send-button" class="send-button" title="Send message">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+          <span class="sr-only">Send message</span>
+        </button>
+      </div>
+      <p class="status-text" id="status">Initializing model...</p>
+    </div>
+  </div>
 
-    self.log = (e) => {
-      if (/error/i.test(e?.constructor?.name)) {
-        console.warn(e);
-      } else {
-        console.log(e);
-      }
-      (
-        document.querySelector("output") ??
-        document.getElementsByTagName("output")?.[0] ??
-        {}
-      ).innerHTML += (" " + (e.message ?? e));
-    };
-    window.addEventListener("error", function(e) {
-      log(e?.message);
-      [...arguments].forEach((x) => {
-        log("window error " + (x?.message ?? x));
-      });
-    });
+  <script type="module">
+    const messagesContainer = document.getElementById('messages');
+    const inputField = document.getElementById('input');
+    const sendButton = document.getElementById('send-button');
+    const statusText = document.getElementById('status');
+
+    function addMessage(text, isUser) {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+      
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'message-content';
+      contentDiv.textContent = text;
+      
+      messageDiv.appendChild(contentDiv);
+      messagesContainer.appendChild(messageDiv);
+      
+      // Scroll to bottom
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    function updateStatus(text) {
+      statusText.textContent = text;
+    }
+
     const gpt2 = new Worker("./distilgpt2/distilgpt2.js");
 
     gpt2.ready = new Promise((resolve) => {
@@ -54,21 +85,56 @@
     });
 
     gpt2.onmessage = (e) => {
-      log(e.data);
-      if (e.data === "ready") {
-        gpt2?.resolve?.(true);
-      };
+      const data = e.data;
+      
+      if (data === "ready") {
+        updateStatus("Model ready");
+        gpt2.resolve?.(true);
+        sendButton.disabled = false;
+        inputField.disabled = false;
+      } else {
+        // Add bot response
+        addMessage(data, false);
+        updateStatus("Ready");
+        sendButton.disabled = false;
+        inputField.disabled = false;
+        inputField.focus();
+      }
     };
 
-    document.getElementsByTagName('button')?.[0]?.addEventListener?.('click', async () => {
+    async function sendMessage() {
+      const message = inputField.value.trim();
+      if (!message) return;
+      
+      // Add user message to chat
+      addMessage(message, true);
+      
+      // Clear input
+      inputField.value = '';
+      
+      // Disable input while processing
+      sendButton.disabled = true;
+      inputField.disabled = true;
+      updateStatus("Generating response...");
+      
+      // Send to worker
       await gpt2.ready;
-      gpt2.postMessage(document.getElementById('input').value);
-    });
-    document.getElementById('input')?.addEventListener?.('keydown', async (event) => {
-      if (event.key === 'Enter') {
-        await gpt2.ready;
-        gpt2.postMessage(document.getElementById('input').value);
+      gpt2.postMessage(message);
+    }
+
+    sendButton.addEventListener('click', sendMessage);
+    
+    inputField.addEventListener('keydown', async (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
       }
+    });
+
+    // Error handling
+    globalThis.addEventListener("error", function(e) {
+      addMessage("Error: " + (e?.message ?? e), false);
+      updateStatus("Error occurred");
     });
   </script>
 </body>
