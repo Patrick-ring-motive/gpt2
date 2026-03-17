@@ -183,22 +183,55 @@ const context = [];
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
     // Generate text
-    const genNext = async (txt) => {
-      const streamer = new TextStreamer(generator.tokenizer, {
-        skip_prompt: true,
-        callback_function: (token) => {
-          log(token);
-          context.push(token);
-        }
-      });
-      const output = await generator(txt, {
-        max_length: 256,
-        do_sample: true,
-        top_k: 10,
-        streamer
-      });
-    };
-    self.onmessage = async (event) => await genNext(event.data);
+    // -- Prompt scaffolding for distilgpt2 --
+const PERSONA = `The following is a chat between a helpful assistant called Bot and a human called User. Bot gives short, direct answers.\n\n`;
+
+let history = PERSONA;
+
+const MAX_HISTORY_CHARS = 800; // stay well under the 256-token window
+
+const trimHistory = () => {
+  // Keep PERSONA + the tail of history that fits
+  if (history.length <= MAX_HISTORY_CHARS) return;
+  const tail = history.slice(history.length - MAX_HISTORY_CHARS);
+  // Don't start mid-turn — find the first complete "User:" boundary
+  const boundary = tail.indexOf('User:');
+  history = PERSONA + (boundary !== -1 ? tail.slice(boundary) : tail);
+};
+
+const parseResponse = (raw) => {
+  // distilgpt2 often hallucinates the next User turn — cut there
+  return raw
+    .split(/\n(?:User:|Human:)/i)[0]
+    .trim();
+};
+
+const genNext = async (userInput) => {
+  trimHistory();
+  const prompt = history + `User: ${userInput}\nBot:`;
+  let rawResponse = '';
+
+  const streamer = new TextStreamer(generator.tokenizer, {
+    skip_prompt: true,
+    callback_function: (token) => {
+      rawResponse += token;
+      log(token);
+    }
+  });
+
+  await generator(prompt, {
+    max_new_tokens: 80,   // <-- new_tokens not max_length, so history growth doesn't starve output
+    do_sample: true,
+    top_k: 10,
+    streamer,
+  });
+
+  const botResponse = parseResponse(rawResponse);
+  // Append the clean exchange to history for next turn
+  history += `User: ${userInput}\nBot: ${botResponse}\n`;
+};
+
+self.onmessage = async (event) => await genNext(event.data);
   } catch (e) {
     log(e);
   }
