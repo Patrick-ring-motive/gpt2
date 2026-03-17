@@ -1,157 +1,163 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GPT-2 Chat</title>
+    <link href="style.css" rel="stylesheet" type="text/css" />
+    <script>
+      ReadableStream.prototype[Symbol.asyncIterator] ??=
+        async function* asyncIterator() {
+          const reader = this?.getReader?.();
+          try {
+            let chunk = await reader.read();
+            while (chunk?.done === false) {
+              yield chunk?.value;
+              chunk = await reader?.read?.();
+            }
+          } finally {
+            reader?.releaseLock?.();
+          }
+        };
+    </script>
+  </head>
 
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GPT-2 Chat</title>
-  <link href="style.css" rel="stylesheet" type="text/css" />
-  <script>
-    ReadableStream.prototype[Symbol.asyncIterator] ??=
-    async function* asyncIterator() {
-      const reader = this?.getReader?.();
-      try {
-        let chunk = await reader.read();
-        while (chunk?.done === false) {
-          yield chunk?.value;
-          chunk = await reader?.read?.();
-        }
-      } finally {
-        reader?.releaseLock?.();
-      }
-    };
-  </script>
-</head>
-
-<body>
-  <div class="chat-container">
-    <div class="chat-header">
-      <h1>GPT-2 Chat</h1>
-      <p class="subtitle">Powered by Transformers.js</p>
-    </div>
-    
-    <div id="messages" class="messages-container"></div>
-    
-    <div class="input-area">
-      <div class="input-wrapper">
-        <input 
-          type="text" 
-          id="input" 
-          class="message-input"
-          placeholder="Type your message..."
-          autocomplete="off"
-        />
-        <button id="send-button" class="send-button" title="Send message">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-          </svg>
-          <span class="sr-only">Send message</span>
-        </button>
+  <body>
+    <div class="chat-container">
+      <div class="chat-header">
+        <h1>GPT-2 Chat</h1>
+        <p class="subtitle">Powered by Transformers.js</p>
       </div>
-      <p class="status-text" id="status">Initializing model...</p>
+
+      <div id="messages" class="messages-container"></div>
+
+      <div class="input-area">
+        <div class="input-wrapper">
+          <input
+            type="text"
+            id="input"
+            class="message-input"
+            placeholder="Type your message..."
+            autocomplete="off"
+          />
+          <button id="send-button" class="send-button" title="Send message">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              aria-hidden="true"
+            >
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+            <span class="sr-only">Send message</span>
+          </button>
+        </div>
+        <p class="status-text" id="status">Initializing model...</p>
+      </div>
     </div>
-  </div>
 
-  <script type="module">
-    const messagesContainer = document.getElementById('messages');
-    const inputField = document.getElementById('input');
-    const sendButton = document.getElementById('send-button');
-    const statusText = document.getElementById('status');
+    <script type="module">
+      const messagesContainer = document.getElementById("messages");
+      const inputField = document.getElementById("input");
+      const sendButton = document.getElementById("send-button");
+      const statusText = document.getElementById("status");
 
-    let lastBotMessageContent = null;
+      let lastBotMessageContent = null;
 
-    function addMessage(text, isUser) {
-      // For bot messages, append to the last bot message if it exists
-      if (!isUser && lastBotMessageContent) {
-        lastBotMessageContent.textContent += text;
-      } else {
-        // Create a new message bubble
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
-        
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'message-content';
-        contentDiv.textContent = text;
-        
-        messageDiv.appendChild(contentDiv);
-        messagesContainer.appendChild(messageDiv);
-        
-        // Update reference to last bot message if this is a bot message
-        if (isUser === false) {
-          lastBotMessageContent = contentDiv;
+      function addMessage(text, isUser) {
+        // For bot messages, append to the last bot message if it exists
+        if (!isUser && lastBotMessageContent) {
+          lastBotMessageContent.textContent += text;
         } else {
-          lastBotMessageContent = null;
+          // Create a new message bubble
+          const messageDiv = document.createElement("div");
+          messageDiv.className = `message ${isUser ? "user-message" : "bot-message"}`;
+
+          const contentDiv = document.createElement("div");
+          contentDiv.className = "message-content";
+          contentDiv.textContent = text;
+
+          messageDiv.appendChild(contentDiv);
+          messagesContainer.appendChild(messageDiv);
+
+          // Update reference to last bot message if this is a bot message
+          if (isUser === false) {
+            lastBotMessageContent = contentDiv;
+          } else {
+            lastBotMessageContent = null;
+          }
         }
+
+        // Scroll to bottom
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
       }
-      
-      // Scroll to bottom
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
 
-    function updateStatus(text) {
-      statusText.textContent = text;
-    }
-
-    const gpt2 = new Worker("./distilgpt2/distilgpt2.js");
-
-    gpt2.ready = new Promise((resolve) => {
-      gpt2.resolve = resolve;
-    });
-
-    gpt2.onmessage = (e) => {
-      const data = e.data;
-      
-      if (data === "ready") {
-        updateStatus("Model ready");
-        gpt2.resolve?.(true);
-        sendButton.disabled = false;
-        inputField.disabled = false;
-      } else if (data !== "ready") {
-        // Append to bot response (or create if first chunk)
-        addMessage(data, false);
-        updateStatus("Ready");
-        sendButton.disabled = false;
-        inputField.disabled = false;
-        inputField.focus();
+      function updateStatus(text) {
+        statusText.textContent = text;
       }
-    };
 
-    async function sendMessage() {
-      const message = inputField.value.trim();
-      if (!message) return;
-      
-      // Add user message to chat
-      addMessage(message, true);
-      
-      // Clear input
-      inputField.value = '';
-      
-      // Disable input while processing
-      sendButton.disabled = true;
-      inputField.disabled = true;
-      updateStatus("Generating response...");
-      
-      // Send to worker
-      await gpt2.ready;
-      gpt2.postMessage(message);
-    }
+      const gpt2 = new Worker("./distilgpt2/distilgpt2.js");
 
-    sendButton.addEventListener('click', sendMessage);
-    
-    inputField.addEventListener('keydown', async (event) => {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        sendMessage();
+      gpt2.ready = new Promise((resolve) => {
+        gpt2.resolve = resolve;
+      });
+
+      gpt2.onmessage = (e) => {
+        const data = e.data;
+
+        if (data === "ready") {
+          updateStatus("Model ready");
+          gpt2.resolve?.(true);
+          sendButton.disabled = false;
+          inputField.disabled = false;
+        } else if (data !== "ready") {
+          // Append to bot response (or create if first chunk)
+          addMessage(data, false);
+          updateStatus("Ready");
+          sendButton.disabled = false;
+          inputField.disabled = false;
+          inputField.focus();
+        }
+      };
+
+      async function sendMessage() {
+        const message = inputField.value.trim();
+        if (!message) return;
+
+        // Add user message to chat
+        addMessage(message, true);
+
+        // Clear input
+        inputField.value = "";
+
+        // Disable input while processing
+        sendButton.disabled = true;
+        inputField.disabled = true;
+        updateStatus("Generating response...");
+
+        // Send to worker
+        await gpt2.ready;
+        gpt2.postMessage(message);
       }
-    });
 
-    // Error handling
-    globalThis.addEventListener("error", function(e) {
-      addMessage("Error: " + (e?.message ?? e), false);
-      updateStatus("Error occurred");
-    });
-  </script>
-</body>
+      sendButton.addEventListener("click", sendMessage);
 
+      inputField.addEventListener("keydown", async (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          sendMessage();
+        }
+      });
+
+      // Error handling
+      globalThis.addEventListener("error", function (e) {
+        addMessage("Error: " + (e?.message ?? e), false);
+        updateStatus("Error occurred");
+      });
+    </script>
+  </body>
 </html>
